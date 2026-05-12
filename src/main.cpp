@@ -121,3 +121,73 @@
 //   - Update the global variables with the latest readings
 //   - Return true if all reads were successful, false if any failed
 
+//Display Functions:
+
+// drawSplashScreen()
+//   - Display a splash screen with the project name and a loading animation while sensors are initializing
+//   -clear the screen and show a "School Environmental Monitor" title
+//   -draw wifi conection animation (e.g. rotating arcs or dots) until Wi-Fi is connected
+
+// drawDashboard()
+//   - Clear the screen and display the latest sensor readings in a clean layout
+//   - Show temperature, humidity, pressure, air quality, light level, and noise level
+//   -called once after boot to set up the layout, then updated with new values as they come in
+
+// updateDisplayValues()
+//  -Erase the old sensor values (e.g. by drawing filled rectangles over them)
+//  -Draw the new sensor values in the same positions
+//  -color-code the air quality and noise levels (e.g. green/yellow/red) based on thresholds
+
+// updateNeoPixel()
+//  - Set the NeoPixel colour based on the latest sensor readings
+//  - For example, use the air quality level to determine the colour:
+//    - Good (low MQ-135 value): Green
+
+// Websocket and Network Functions:
+
+// builsdSensorJSON()
+//   - Create a JSON object containing the latest sensor readings
+//   - Convert the JSON object to a string and return it
+//   - This string will be sent to the client via WebSocket
+
+// notifyClients()
+//   - Call buildSensorJSON() to get the latest sensor data as a JSON string
+//   - Use ws.textAll() to send this string to all connected WebSocket clients
+//   - This function can be called after each sensor read or on a timer to keep clients
+
+// handleWebSocketMessage()
+//   - Parse incoming messages from clients (if needed)
+//   - For example, clients could send commands to change the display mode or request specific data
+//   - This function will be set as the event handler for WebSocket messages
+//   - Any unrecognized messages can be ignored or logged for debugging
+
+// onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+// switch on EventType:
+// WS_EVT_CONNECT:
+//  - Log the new connection (client->id())
+// WS_EVT_DISCONNECT:
+//  - Log the disconnection (client->id())
+// WS_EVT_DATA:
+//  - Call handleWebSocketMessage() with the received data
+// WS_EVT_PONG:
+//  - Handle pong responses if needed (e.g. for keep-alive)
+
+//setup():
+// Call all the initialization functions in the correct order:
+// 1. initSerial()
+// 2. initPins()
+// 3. initLittleFS()
+// 4. initWiFi()
+// 5. initTFT()
+// 6. initNeoPixel()
+// 7. initWebSocket()
+// 8. initWebServer()
+
+//loop():
+// Use millis() to manage timing for sensor reads and broadcasts:
+// unsigned long currentMillis = millis();
+// if (currentMillis - lastSensorRead >= SENSOR_INTERVAL) { 
+//   if (readAllSensors()) {
+//     updateDisplayValues();
+//     updateNeoPixel();
+//     lastSensorRead = currentMillis;
