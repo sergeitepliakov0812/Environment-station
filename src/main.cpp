@@ -1,4 +1,54 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <LittleFS.h>
+#include <Arduino_JSON.h>
+#include <TFT_eSPI.h>          
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+#include <Adafruit_NeoPixel.h>
+#include <Adafruit_AHTX0.h>
+#include <Adafruit_BMP280.h>
+#include <BH1750.h>
+
+#define WIFI_SSID "T8-Arduino"
+#define WIFI_PASSWORD "T8-Arduino"
+
+#define ADC_MQ135 A0 // MQ-135 air quality sensor connected to ADC pin A0 
+#define ADC_MIC A1   // MAX4466 microphone output connected to ADC pin A1
+#define GPIO_PIR A2   // HC-SR501 PIR motion sensor output connected to GPIO -Digital pin A2
+
+#define BTNPIN 0     // User button
+#define LEDPIN 13    // Built-in LED
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //Libraries used in this project:
 // WiFi.h              — Wi-Fi connectivity
