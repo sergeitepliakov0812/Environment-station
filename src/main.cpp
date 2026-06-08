@@ -3,107 +3,222 @@
 #include <Adafruit_AHTX0.h>
 #include <Adafruit_BMP280.h>
 #include <BH1750.h>
+ 
+#define I2C_SDA_PIN     3       // STEMMA QT SDA (Feather ESP32-S3)
+#define I2C_SCL_PIN     4       // STEMMA QT SCL (Feather ESP32-S3)
+ 
+#define ADC_MQ135       A0      // MQ-135 analog out  (GPIO 17)
+#define MQ135_DO_PIN    10      // MQ-135 digital out (free GPIO)
+#define ADC_MIC         A1      // MAX4466 analog out (GPIO 18)
+#define TFT_I2C_POWER   7       // I²C power rail enable
+ 
 
-#define I2C_SDA_PIN 3
-#define I2C_SCL_PIN 4
+const unsigned long SENSOR_INTERVAL    = 2000;   // ms between sensor reads
+const unsigned long MQ135_WARMUP_MS    = 30000;  // 30-second MQ-135 warm-up
+const unsigned int  NOISE_SAMPLE_MS    = 50;     // peak-to-peak window for mic
 
-#define ADC_MQ135 A0
-#define MQ135_DO_PIN 10
-#define ADC_MIC A1
-#define TFT_I2C_POWER 7
-
-const unsigned long SENSOR_INTERVAL = 2000; // 2 seconds
-const unsigned long MQ135_WARMUP_TIME = 30000; // 30 seconds
-const unsigned long NOISE_SAMPLE_MS = 50; // 50 ms sample window for noise measurement
-
-Adafruit_AHTX0 aht;
-Adafruit_BMP280 bmp;
-BH1750 lightmeter;
-
-float temperature = 0.0;
-float humidity = 0.0;
-float pressure = 0.0;
-int airQualityRaw = 0; 
-float lux = 0.0;
-float noiseDB = 0.0;
-bool mq135Ready = false;
-
+Adafruit_AHTX0   aht;
+Adafruit_BMP280  bmp;
+BH1750           lightMeter;
+ 
+float temperature    = 0.0f;   // °C  (averaged AHT + BMP)
+float humidity       = 0.0f;   // %RH (AHT)
+float pressure       = 0.0f;   // hPa (BMP)
+int   airQualityRaw  = 0;      // 0–4095 ADC
+bool  mq135Ready     = false;
+float lux            = 0.0f;   // lux (BH1750)
+float noiseDB        = 0.0f;   // relative dB (MAX4466)
+ 
 unsigned long lastSensorRead = 0;
 bool ahtOK = false;
 bool bmpOK = false;
 bool lightOK = false;
 
-void serialSetup() {
+void initSerial() {
   Serial.begin(115200);
   while (!Serial) { delay(10); }
+  delay(100);
   Serial.println();
-  Serial.println(F("Serial initialized"));
+  Serial.println(F("=== School Environmental Monitor — Sensor Test ==="));
 }
-
+ 
 void initPins() {
+  // Power up the I²C rail on the Feather Reverse TFT
   pinMode(TFT_I2C_POWER, OUTPUT);
-  digitalWrite(TFT_I2C_POWER, HIGH); // Power on I2C sensors
+  digitalWrite(TFT_I2C_POWER, HIGH);
   delay(10);
+ 
   pinMode(MQ135_DO_PIN, INPUT);
-  analogReadResolution(12);         // 12-bit: 0–4095
-  analogSetAttenuation(ADC_11db);   // full 0–3.3V range
-  Serial.println(F("Pins initialized"));
+ 
+  analogReadResolution(12);         // 12-bit ADC: 0–4095
+  analogSetAttenuation(ADC_11db);   // full 0–3.3 V range
+ 
+  Serial.println(F("[pins] OK"));
 }
-
+ 
 void initSensors() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  Wire.setClock(400000); // 400 kHz I2C speed
-
-    ahtOK = aht.begin();
-    Serial.printf("[AHT20] %s\n", ahtOK ? "OK" : "FAILED");
-
-    bmpOK = bmp.begin(0x76);
-    if (bmpOK) {
-      bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
-                      Adafruit_BMP280::SAMPLING_X2,
-                      Adafruit_BMP280::SAMPLING_X16,
-                      Adafruit_BMP280::FILTER_X16,
-                      Adafruit_BMP280::STANDBY_MS_500);
-    Serial.println("[BMP280] OK");
-    } else {
-      Serial.println("[BMP280] FAILED");
-    }
-
-    lightOK = lightmeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
-    Serial.printf("[BH1750] %s\n", lightOK ? "OK" : "FAILED");
-
-    Serial.printf("[MQ-135] warming up for %lu s... \n", MQ135_WARMUP_TIME / 1000);
-    delay(MQ135_WARMUP_TIME);
-    mq135Ready = true;
-    Serial.println("[MQ-135] ready");
-
-    Serial.println(F("Sensor initialization complete"));
+  Wire.setClock(400000);
+ 
+  // AHT20
+  ahtOK = aht.begin();
+  Serial.printf("[AHT20]  %s\n", ahtOK ? "OK" : "NOT FOUND — check wiring");
+ 
+  // BMP280 (default address 0x77, some boards use 0x76)
+  bmpOK = bmp.begin(0x77) || bmp.begin(0x76);
+  if (bmpOK) {
+    bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
+                    Adafruit_BMP280::SAMPLING_X2,
+                    Adafruit_BMP280::SAMPLING_X16,
+                    Adafruit_BMP280::FILTER_X16,
+                    Adafruit_BMP280::STANDBY_MS_500);
+    Serial.println(F("[BMP280] OK"));
+  } else {
+    Serial.println(F("[BMP280] NOT FOUND — check wiring"));
+  }
+ 
+  // BH1750
+  lightOK = lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
+  Serial.printf("[BH1750] %s\n", lightOK ? "OK" : "NOT FOUND — check wiring");
+ 
+  // MQ-135 warm-up notice
+  Serial.printf("[MQ-135] warming up for %lu s...\n", MQ135_WARMUP_MS / 1000);
 }
 
+// Returns true if at least one source succeeded.
 bool readTempHumidityPressure() {
-    float ahtTemp = NAN, ahtHum = NAN;
-    float bmpTemp = NAN, bmpPres = NAN;
-
-    if(ahtOK) {
-        sensors_event_t hEvent, tEvent;
-        if (aht.getEvent(&hEvent, &tEvent)) {
-            ahtTemp = tEvent.temperature;
-            ahtHum = hEvent.relative_humidity;
-        }
+  float ahtTemp = NAN, ahtHum = NAN;
+  float bmpTemp = NAN, bmpPres = NAN;
+ 
+  if (ahtOK) {
+    sensors_event_t hEvent, tEvent;
+    if (aht.getEvent(&hEvent, &tEvent)) {
+      ahtTemp = tEvent.temperature;
+      ahtHum  = hEvent.relative_humidity;
     }
-    if(bmpOK) {
-        bmpTemp = bmp.readTemperature();
-        bmpPres = bmp.readPressure() / 100.0; // Convert Pa to hPa
-    }
-    if (!isnan(ahtTemp) && !isnan(bmpTemp)) {
-        temperature = (ahtTemp + bmpTemp) / 2.0; // Average for stability
-    } else if (!isnan(ahtTemp)) {
-        temperature = ahtTemp;
-    } else if (!isnan(bmpTemp)) {
-        temperature = bmpTemp;
+  }
+ 
+  if (bmpOK) {
+    bmpTemp = bmp.readTemperature();
+    bmpPres = bmp.readPressure() / 100.0f;   // Pa → hPa
+  }
+ 
+  // Average temperature from whichever sensors responded
+  if (!isnan(ahtTemp) && !isnan(bmpTemp)) {
+    temperature = (ahtTemp + bmpTemp) / 2.0f;
+  } else if (!isnan(ahtTemp)) {
+    temperature = ahtTemp;
+  } else if (!isnan(bmpTemp)) {
+    temperature = bmpTemp;
+  } else {
+    return false;
+  }
+ 
+  if (!isnan(ahtHum))  humidity  = ahtHum;
+  if (!isnan(bmpPres)) pressure  = bmpPres;
+  return true;
+}
+ 
+// Returns raw ADC value; sets mq135Ready after warm-up period.
+int readAirQuality() {
+  if (!mq135Ready) {
+    if (millis() >= MQ135_WARMUP_MS) {
+      mq135Ready = true;
+      Serial.println(F("[MQ-135] warm-up complete — readings now valid"));
     } else {
-        return false; // Failed to read any temperature
-    }   
+      return -1;   // still warming up
+    }
+  }
+  airQualityRaw = analogRead(ADC_MQ135);
+  return airQualityRaw;
+}
+ 
+// Returns lux value from BH1750; -1 on failure.
+float readLight() {
+  if (!lightOK) return -1.0f;
+  if (lightMeter.measurementReady()) {
+    lux = lightMeter.readLightLevel();
+  }
+  return lux;
+}
+ 
+// Samples MAX4466 over NOISE_SAMPLE_MS and converts peak-to-peak to relative dB.
+float readNoise() {
+  unsigned long start = millis();
+  int sampleMax = 0, sampleMin = 4095;
+ 
+  while (millis() - start < NOISE_SAMPLE_MS) {
+    int s = analogRead(ADC_MIC);
+    if (s > sampleMax) sampleMax = s;
+    if (s < sampleMin) sampleMin = s;
+  }
+ 
+  int peakToPeak = sampleMax - sampleMin;
+  // Map peak-to-peak (noise floor ~30 to max 4095) onto a 0–100 dB relative scale
+  if (peakToPeak < 1) peakToPeak = 1;
+  noiseDB = 20.0f * log10f((float)peakToPeak / 4095.0f * 100.0f + 1.0f);
+  return noiseDB;
+}
+ 
+// Calls all readers; returns true if core sensors (temp/humidity) succeeded.
+bool readAllSensors() {
+  bool ok = readTempHumidityPressure();
+  readAirQuality();
+  readLight();
+  readNoise();
+  return ok;
+}
+ 
+void printAllSensors() {
+  Serial.println(F("──────────────────────────────────"));
+ 
+  // Temperature
+  Serial.printf("Temp     : %.2f °C\n", temperature);
+ 
+  // Humidity
+  Serial.printf("Humidity : %.2f %%RH\n", humidity);
+ 
+  // Pressure
+  Serial.printf("Pressure : %.2f hPa\n", pressure);
+ 
+  // Light
+  if (lightOK) {
+    Serial.printf("Light    : %.2f lx\n", lux);
+  } else {
+    Serial.println(F("Light    : sensor error"));
+  }
+ 
+  // Air quality
+  if (!mq135Ready) {
+    unsigned long remaining = (MQ135_WARMUP_MS - millis()) / 1000;
+    Serial.printf("MQ-135   : warming up (%lu s left)\n", remaining);
+  } else {
+    bool alert = (digitalRead(MQ135_DO_PIN) == LOW);
+    Serial.printf("MQ-135   : raw %4d | DO: %s\n",
+                  airQualityRaw,
+                  alert ? "ALERT" : "clear");
+  }
+ 
+  // Noise
+  Serial.printf("Noise    : %.1f dB (relative)\n", noiseDB);
+}
+
+void setup() {
+  initSerial();
+  initPins();
+  initSensors();
+  Serial.println(F("[setup] complete — entering main loop"));
+  Serial.println();
+}
+ 
+void loop() {
+  unsigned long now = millis();
+ 
+  if (now - lastSensorRead >= SENSOR_INTERVAL) {
+    lastSensorRead = now;
+    readAllSensors();
+    printAllSensors();
+  }
 }
 
 //Libraries used in this project:
