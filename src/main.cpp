@@ -11,7 +11,7 @@
 #define MQ135_DO_PIN    10      // MQ-135 digital out (free GPIO)
 #define ADC_MIC         A1      // MAX4466 analog out (GPIO 18)
 #define TFT_I2C_POWER   7       // I²C power rail enable
- 
+#define BUZZER_PIN      11      // Active buzzer (free GPIO)
 
 const unsigned long SENSOR_INTERVAL    = 2000;   // ms between sensor reads
 const unsigned long MQ135_WARMUP_MS    = 30000;  // 30-second MQ-135 warm-up
@@ -49,6 +49,8 @@ void initPins() {
   delay(10);
  
   pinMode(MQ135_DO_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
  
   analogReadResolution(12);         // 12-bit ADC: 0–4095
   analogSetAttenuation(ADC_11db);   // full 0–3.3 V range
@@ -84,6 +86,34 @@ void initSensors() {
   // MQ-135 warm-up notice
   Serial.printf("[MQ-135] warming up for %lu s...\n", MQ135_WARMUP_MS / 1000);
 }
+
+  //Buzzer alert
+
+  void buzzerBeep(unsigned int frequency, unsigned int durationMs) {
+    tone(BUZZER_PIN, frequency, durationMs);
+    delay(durationMs + 50);  // Wait for the tone to finish plus a small gap
+    noTone(BUZZER_PIN);
+  }
+
+  void initBuzzer() {
+    buzzerBeep(1000, 80); 
+    delay(60);
+    buzzerBeep(1500, 80);
+    Serial.println(F("[Buzzer] OK"));
+  }
+
+  void buzzerAlert() {
+    for (uint8_t i = 0; i < 2; i++) {
+      buzzerBeep(2000, 100);
+      delay(100);
+    }
+  }
+
+  void buzzerReady() {
+    buzzerBeep(880, 80); delay (40);
+     buzzerBeep(1100, 80); delay(40);
+     buzzerBeep(1320, 120);
+  }
 
 // Returns true if at least one source succeeded.
 bool readTempHumidityPressure() {
@@ -197,6 +227,7 @@ void printAllSensors() {
     Serial.printf("MQ-135   : raw %4d | DO: %s\n",
                   airQualityRaw,
                   alert ? "ALERT" : "clear");
+    if (alert) buzzerAlert();
   }
  
   // Noise
@@ -207,8 +238,10 @@ void setup() {
   initSerial();
   initPins();
   initSensors();
+  initBuzzer();
   Serial.println(F("[setup] complete — entering main loop"));
   Serial.println();
+  buzzerReady(); 
 }
  
 void loop() {
