@@ -3,16 +3,24 @@
 #include <Adafruit_AHTX0.h>
 #include <Adafruit_BMP280.h>
 #include <BH1750.h>
- 
+#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
+#include <Arduino_JSON.h>
+#include "secrets.h"
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+#include <SPI.h>
+#include <Adafruit_NeoPixel.h>
+
 #define I2C_SDA_PIN     3       // STEMMA QT SDA (Feather ESP32-S3)
 #define I2C_SCL_PIN     4       // STEMMA QT SCL (Feather ESP32-S3)
- 
+
 #define ADC_MQ135       A0      // MQ-135 analog out  (GPIO 17)
 #define MQ135_DO_PIN    10      // MQ-135 digital out (free GPIO)
 #define ADC_MIC         A1      // MAX4466 analog out (GPIO 18)
-#define TFT_I2C_POWER   7       // I²C power rail enable
 #define BUZZER_PIN      11      // Active buzzer (free GPIO)
 
+#define MQ135_ALERT_THRESHOLD  800
 const unsigned long SENSOR_INTERVAL    = 2000;   // ms between sensor reads
 const unsigned long MQ135_WARMUP_MS    = 30000;  // 30-second MQ-135 warm-up
 const unsigned int  NOISE_SAMPLE_MS    = 50;     // peak-to-peak window for mic
@@ -20,7 +28,7 @@ const unsigned int  NOISE_SAMPLE_MS    = 50;     // peak-to-peak window for mic
 Adafruit_AHTX0   aht;
 Adafruit_BMP280  bmp;
 BH1750           lightMeter;
- 
+
 float temperature    = 0.0f;   // °C  (averaged AHT + BMP)
 float humidity       = 0.0f;   // %RH (AHT)
 float pressure       = 0.0f;   // hPa (BMP)
@@ -28,11 +36,114 @@ int   airQualityRaw  = 0;      // 0–4095 ADC
 bool  mq135Ready     = false;
 float lux            = 0.0f;   // lux (BH1750)
 float noiseDB        = 0.0f;   // relative dB (MAX4466)
- 
+
 unsigned long lastSensorRead = 0;
 bool ahtOK = false;
 bool bmpOK = false;
 bool lightOK = false;
+//------------- Screen setup --------------
+Adafruit_ST7789 tftScreen = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+
+
+//------------- Neopixel setup --------------
+Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+//these values give a green light on neopixel
+int red = 0;
+int green = 255;
+int blue = 0;
+
+
+//------------- WiFi setup --------------
+//the Wifi status
+//int status = WL_IDLE_STATUS;
+
+//Your network name and password are hidden in the secrets.h file
+const char SSID[] = SECRET_SSID;
+const char PASSWORD[] = SECRET_PASS;
+
+//------------- WebServer setup --------------
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
+// Create a WebSocket object
+AsyncWebSocket ws("/ws");
+
+
+void initLittleFS() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("LittleFS failed to setup");
+  } else {
+    Serial.println("LittleFS should be going now");
+  }
+}
+
+/**
+LittleFS reading a file 
+*/
+String readFile(fs::FS& fs, const char* path) {
+  Serial.print("Reading file: ");
+  Serial.println(path);
+  File file = fs.open(path);
+  if (!file || file.isDirectory()) {
+    Serial.println("readFile failed to open file");
+    return String();
+  }
+  String fileContent;
+  while (file.available()) {
+    fileContent = file.readStringUntil('\n');
+    break;
+  }
+  return fileContent;
+}
+
+/**
+LittleFS writing a file
+*/
+void writeFile(fs::FS& fs, const char* path, const char* message) {
+  Serial.print("Writing file: ");
+  Serial.println(path);
+  File file = fs.open(path, FILE_WRITE);
+  if (!file) {
+    Serial.println("writeFile failed to write to file");
+    return;
+  }
+  if (file.print(message)) {
+    Serial.println("- writeFile success");
+  } else {
+    Serial.println("- writeFile failed");
+  }
+}
+
+String getOutputStates() {
+JSONVar myArray;
+
+myArray["values"][0]["name"] = "Temperature";
+myArray["values"][0]["value"] = temperature;
+myArray["values"][0]["unit"] = "°C";
+
+myArray["values"][1]["name"] = "Humidity";
+myArray["values"][1]["value"] = humidity;
+myArray["values"][1]["unit"] = "%RH";
+
+myArray["values"][2]["name"] = "Pressure";
+myArray["values"][2]["value"] = pressure;
+myArray["values"][2]["unit"] = "hPa";
+
+myArray["values"][3]["name"] = "Light";
+myArray["values"][3]["value"] = light;
+myArray["values"][3]["unit"] = "lux";
+
+myArray["values"][4]["name"] = "Air Quality";
+myArray["values"][4]["value"] = mq135Ready ? airQualityRaw : -1;
+myArray["values"][4]["unit"] = "raw ADC";
+myArray["values"][4]["ready"] = mq135Ready;
+
+myArray["values"][5]["name"] = "Noise";
+myArray["values"][5]["value"] = noiseDB;
+myArray["values"][5]["unit"] = "dB";
+
+String jsonString = JSON.stringify(myArray);
+return JSON.stringify(myArray);
+}
 
 void initSerial() {
   Serial.begin(115200);
@@ -43,11 +154,6 @@ void initSerial() {
 }
  
 void initPins() {
-  // Power up the I²C rail on the Feather Reverse TFT
-  pinMode(TFT_I2C_POWER, OUTPUT);
-  digitalWrite(TFT_I2C_POWER, HIGH);
-  delay(10);
- 
   pinMode(MQ135_DO_PIN, INPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
@@ -57,7 +163,7 @@ void initPins() {
  
   Serial.println(F("[pins] OK"));
 }
- 
+
 void initSensors() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000);
@@ -87,7 +193,7 @@ void initSensors() {
   Serial.printf("[MQ-135] warming up for %lu s...\n", MQ135_WARMUP_MS / 1000);
 }
 
-  //Buzzer alert
+// Buzzer alert
 
   void buzzerBeep(unsigned int frequency, unsigned int durationMs) {
     tone(BUZZER_PIN, frequency, durationMs);
@@ -103,11 +209,20 @@ void initSensors() {
   }
 
   void buzzerAlert() {
-    for (uint8_t i = 0; i < 2; i++) {
-      buzzerBeep(2000, 100);
-      delay(100);
+  for (uint8_t i = 0; i < 3; i++) {
+    // Sweep up
+    for (int freq = 800; freq <= 2400; freq += 80) {
+      tone(BUZZER_PIN, freq);
+      delay(8);
+    }
+    // Sweep down
+    for (int freq = 2400; freq >= 800; freq -= 80) {
+      tone(BUZZER_PIN, freq);
+      delay(8);
     }
   }
+  noTone(BUZZER_PIN);
+}
 
   void buzzerReady() {
     buzzerBeep(880, 80); delay (40);
@@ -223,7 +338,7 @@ void printAllSensors() {
     unsigned long remaining = (MQ135_WARMUP_MS - millis()) / 1000;
     Serial.printf("MQ-135   : warming up (%lu s left)\n", remaining);
   } else {
-    bool alert = (digitalRead(MQ135_DO_PIN) == LOW);
+    bool alert = (digitalRead(MQ135_DO_PIN) == LOW) || (airQualityRaw > MQ135_ALERT_THRESHOLD);
     Serial.printf("MQ-135   : raw %4d | DO: %s\n",
                   airQualityRaw,
                   alert ? "ALERT" : "clear");
@@ -254,15 +369,12 @@ void loop() {
   }
 }
 
-//Libraries used in this project:
+// Libraries used in this project:
 // WiFi.h              — Wi-Fi connectivity
 // AsyncTCP.h          — Async TCP base layer
 // ESPAsyncWebServer.h — Async web + WebSocket server
 // LittleFS.h          — On-flash file system (HTML/CSS/JS)
 // Arduino_JSON.h      — JSON building / parsing
-// Adafruit_GFX.h      — Graphics primitives for TFT
-// Adafruit_ST7789.h   — Driver for the TFT display
-// Adafruit_NeoPixel.h — NeoPixel status LED
 // Adafruit_AHTX0.h    — AHT20 temp + humidity sensor
 // Adafruit_BMP280.h   — BMP280 pressure + temp sensor
 // BH1750.h            — BH1750 light sensor (lux)
@@ -273,15 +385,11 @@ void loop() {
 //     ADC_MQ135           — analog in from MQ-135 AOUT pin
 //     ADC_MIC             — analog in from MAX4466 OUT pin
 //     GPIO_PIR            — digital in from HC-SR501 OUT pin
-//     TFT_CS / DC / RST   — SPI chip-select, data/cmd, reset
-//     TFT_BACKLITE        — backlight enable
-//     TFT_I2C_POWER       — I²C power rail enable
 //     PIN_NEOPIXEL        — on-board NeoPixel data
 //     BTNPIN (GPIO 2)     — user button
 //     LEDPIN (GPIO 13)    — built-in LED
 // global objects and variables:
 //     Sensor driver objects (AHTX0, BMP280, BH1750)
-// TFT screen object (Adafruit_ST7789)
 // NeoPixel object (1 pixel)
 // AsyncWebServer object on port 80
 // AsyncWebSocket object on path "/ws"
@@ -306,30 +414,25 @@ void loop() {
 // MQ-135 warm-up flag:
 //   bool mq135Ready
 
-// Initilisation helpers
+// Initialization helpers
 
 // initSerial()
 //   - Start serial at 115200 baud
 // Block until serial is ready (with timeout to avoid infinite block if no serial)
 
 // initPins()
-//   - Set pin modes for TFT, NeoPixel, sensors, button, LED
+//   - Set pin modes for sensors, button, LED
 
 // initLittleFS()
 //   - Call LittleFS.begin() and check for success
 
-// initsensors()
+// initSensors()
 //   - Initialize AHTX0, BMP280, BH1750 sensors
 
 // initWiFi()
 //   - Connect to Wi-Fi using credentials from secrets.h
 //   - Use WiFi.begin() and wait for connection
 //   - Print local IP address once connected
-
-// initTFT()
-//   - Initialize the TFT display
-//   - Set rotation, fill screen, set text color/size
-//   - Display a "Connecting to Wi-Fi..." message until Wi-Fi is connected
 
 // initNeoPixel()
 //   - Initialize the NeoPixel object
@@ -430,16 +533,13 @@ void loop() {
 // 2. initPins()
 // 3. initLittleFS()
 // 4. initWiFi()
-// 5. initTFT()
-// 6. initNeoPixel()
-// 7. initWebSocket()
-// 8. initWebServer()
+// 5. initNeoPixel()
+// 6. initWebSocket()
+// 7. initWebServer()
 
 // loop():
 // Use millis() to manage timing for sensor reads and broadcasts:
 // unsigned long currentMillis = millis();
 // if (currentMillis - lastSensorRead >= SENSOR_INTERVAL) {
 //   if (readAllSensors()) {
-//     updateDisplayValues();
-//     updateNeoPixel();
 //     lastSensorRead = currentMillis;
