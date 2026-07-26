@@ -11,6 +11,7 @@
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include <Adafruit_NeoPixel.h>
+#include <LittleFS.h>
 
 #define I2C_SDA_PIN     3       // STEMMA QT SDA (Feather ESP32-S3)
 #define I2C_SCL_PIN     4       // STEMMA QT SCL (Feather ESP32-S3)
@@ -28,6 +29,7 @@ const unsigned int  NOISE_SAMPLE_MS    = 50;     // peak-to-peak window for mic
 Adafruit_AHTX0   aht;
 Adafruit_BMP280  bmp;
 BH1750           lightMeter;
+
 
 float temperature    = 0.0f;   // °C  (averaged AHT + BMP)
 float humidity       = 0.0f;   // %RH (AHT)
@@ -67,6 +69,53 @@ AsyncWebServer server(80);
 // Create a WebSocket object
 AsyncWebSocket ws("/ws");
 
+void initSerial();
+void initPins();
+void initLittleFS();
+void initWiFi();
+void initSensors();
+void initWebSocket();
+void initWebServer();
+void initBuzzer();
+void buzzerBeep(unsigned int frequency, unsigned int durationMs);
+void buzzerAlert();
+void buzzerReady();
+bool readTempHumidityPressure();
+int readAirQuality();
+float readLight();
+float readNoise();
+bool readAllSensors();
+void printAllSensors();
+String getOutputStates();
+void notifyClients(String state);
+void handleWebSocketMessage(void* arg, uint8_t* data, size_t len);
+void onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len);
+String readFile(fs::FS& fs, const char* path);
+void writeFile(fs::FS& fs, const char* path, const char* message);
+
+void onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      //Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      Serial.print("WebSocket client ");
+      Serial.print(client->id());
+      Serial.print(" connected from ");
+      Serial.println(client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      //Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      Serial.print("WebSocket client ");
+      Serial.print(client->id());
+      Serial.println(" disconnected\n");
+      break;
+    case WS_EVT_DATA:
+      handleWebSocketMessage(arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
+}
 
 void initLittleFS() {
   if (!LittleFS.begin(true)) {
@@ -129,7 +178,7 @@ myArray["values"][2]["value"] = pressure;
 myArray["values"][2]["unit"] = "hPa";
 
 myArray["values"][3]["name"] = "Light";
-myArray["values"][3]["value"] = light;
+myArray["values"][3]["value"] = lux;
 myArray["values"][3]["unit"] = "lux";
 
 myArray["values"][4]["name"] = "Air Quality";
@@ -144,6 +193,62 @@ myArray["values"][5]["unit"] = "dB";
 String jsonString = JSON.stringify(myArray);
 return JSON.stringify(myArray);
 }
+
+void notifyClients(String state) {
+  ws.textAll(state);
+}
+
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(SSID, PASSWORD);
+  Serial.print("Connecting to WiFi ");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.print("Connected, IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void initWebSocket() {
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
+  Serial.println("WebSocket initialized");
+}
+
+void initWebServer() {
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(LittleFS, "/index.html", "text/html", false);
+  });
+  server.serveStatic("/", LittleFS, "/");
+  server.begin();
+  Serial.println("Web server started");
+}
+
+void handleWebSocketMessage(void* arg, uint8_t* data, size_t len) {
+  AwsFrameInfo* info = (AwsFrameInfo*)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+    data[len] = 0;
+    //if message is states send the state of all gpio pins
+    if (strcmp((char*)data, "getStates") == 0) {
+      notifyClients(getOutputStates());
+    } else {
+      //(char*)data should be in this format "rgb(255,87,51)" when it isn't 'getStates'
+      std::string rgb = (char*)data;
+      byte firstComma = rgb.find(',');
+      byte secondComma = rgb.find(',', firstComma + 1);
+      byte lastBracket = rgb.find(')');
+
+      red = stoi(rgb.substr(4, firstComma));
+      green = stoi(rgb.substr(firstComma + 1, secondComma - firstComma - 1));
+      blue = stoi(rgb.substr(secondComma + 1, lastBracket));
+    }
+    //Just to alternate the led on and off to show we can digitalRead and digitalWrite here
+    //digitalWrite(LEDPIN, !digitalRead(LEDPIN)); //AM I AN ISSUE NEED TO TEST--------------------------------------
+  }
+}
+ 
 
 void initSerial() {
   Serial.begin(115200);
@@ -350,22 +455,29 @@ void printAllSensors() {
 }
 
 void setup() {
-  initSerial();
+initSerial();
   initPins();
+  initLittleFS();
+  initWiFi();
   initSensors();
+  initWebSocket();
+  initWebServer();
   initBuzzer();
   Serial.println(F("[setup] complete — entering main loop"));
   Serial.println();
-  buzzerReady(); 
+  buzzerReady();
 }
  
 void loop() {
-  unsigned long now = millis();
- 
+ unsigned long now = millis();
+
+  ws.cleanupClients();
+
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now;
     readAllSensors();
     printAllSensors();
+    notifyClients(getOutputStates());
   }
 }
 
