@@ -1,0 +1,119 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 20px;
+    background: #e8813a;
+    font-family: 'Trebuchet MS', sans-serif;
+    display: flex;
+    justify-content: center;
+}
+
+.board {
+  display: flex;
+  background: #fff;
+  border: 6px solid #e2447a;
+  border-radius: 6px;
+  max-width: 1000px;
+  width: 100%;
+  overflow: hidden;
+}
+ 
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 6px solid #e2447a;
+  min-width: 140px;
+}
+ 
+.sensor-block {
+  flex: 1;
+  border-bottom: 4px solid #e2447a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  color: #e2447a;
+  font-weight: bold;
+  font-size: 1.1em;
+  text-align: left;
+}
+ 
+.sensor-block:last-child {
+  border-bottom: none;
+}
+ 
+.arrow {
+  color: #e2447a;
+  font-size: 1.3em;
+}
+ 
+/* Main panel */
+.panel {
+  flex: 1;
+  padding: 20px 30px;
+  color: #e2447a;
+}
+ 
+.panel h1 {
+  font-size: 2em;
+  margin: 10px 0;
+}
+ 
+.extra-row {
+  display: flex;
+  gap: 30px;
+  font-size: 1.2em;
+  margin: 10px 0 20px 0;
+}
+ 
+#connectBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  font-size: 0.9em;
+}
+ 
+#connectBar input {
+  padding: 4px 8px;
+  border: 2px solid #e2447a;
+  border-radius: 4px;
+}
+ 
+#connectBar button {
+  background: #e2447a;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+ 
+#connectBar button:hover {
+  background: #c73267;
+}
+ 
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+ 
+.status-dot.offline {
+  background: #999;
+}
+ 
+.status-dot.online {
+  background: #2ecc71;
+}
+ 
+canvas {
+  border: 2px solid #e2447a;
+  border-radius: 4px;
+  max-width: 100%;
+}

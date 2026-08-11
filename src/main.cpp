@@ -40,6 +40,7 @@ float lux            = 0.0f;   // lux (BH1750)
 float noiseDB        = 0.0f;   // relative dB (MAX4466)
 
 unsigned long lastSensorRead = 0;
+unsigned long lastIpPrint = 0;
 bool ahtOK = false;
 bool bmpOK = false;
 bool lightOK = false;
@@ -165,28 +166,28 @@ void writeFile(fs::FS& fs, const char* path, const char* message) {
 String getOutputStates() {
 JSONVar myArray;
 
-myArray["values"][0]["name"] = "Temperature";
+myArray["values"][0]["name"] = "temperature";
 myArray["values"][0]["value"] = temperature;
 myArray["values"][0]["unit"] = "°C";
 
-myArray["values"][1]["name"] = "Humidity";
+myArray["values"][1]["name"] = "humidity";
 myArray["values"][1]["value"] = humidity;
 myArray["values"][1]["unit"] = "%RH";
 
-myArray["values"][2]["name"] = "Pressure";
+myArray["values"][2]["name"] = "pressure";
 myArray["values"][2]["value"] = pressure;
 myArray["values"][2]["unit"] = "hPa";
 
-myArray["values"][3]["name"] = "Light";
+myArray["values"][3]["name"] = "light";
 myArray["values"][3]["value"] = lux;
 myArray["values"][3]["unit"] = "lux";
 
-myArray["values"][4]["name"] = "Air Quality";
+myArray["values"][4]["name"] = "airQuality";
 myArray["values"][4]["value"] = mq135Ready ? airQualityRaw : -1;
 myArray["values"][4]["unit"] = "raw ADC";
 myArray["values"][4]["ready"] = mq135Ready;
 
-myArray["values"][5]["name"] = "Noise";
+myArray["values"][5]["name"] = "noise";
 myArray["values"][5]["value"] = noiseDB;
 myArray["values"][5]["unit"] = "dB";
 
@@ -253,7 +254,7 @@ void handleWebSocketMessage(void* arg, uint8_t* data, size_t len) {
 void initSerial() {
   Serial.begin(115200);
   while (!Serial) { delay(10); }
-  delay(100);
+  delay(1000);
   Serial.println();
   Serial.println(F("=== School Environmental Monitor — Sensor Test ==="));
 }
@@ -472,6 +473,12 @@ void loop() {
  unsigned long now = millis();
 
   ws.cleanupClients();
+
+  if (now - lastIpPrint >= 5000) {
+    lastIpPrint = now;
+    Serial.print("[IP] ");
+    Serial.println(WiFi.localIP());
+  }
 
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now;

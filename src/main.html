@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Environmental Station</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="board">
+<aside class="sidebar">
+<div class="sensor-block">
+    <span>AHT10<br>+ BMP280</span>
+    <div class="arrow">&#9654;</div>
+</div>
+<div class="sensor-block">
+    <span>BH1750</span>
+    <div class="arrow">&#9654;</div>
+</div>
+<div class="sensor-block">
+    <span>MAX<br><span id="maxLight">----</span></span>
+    <div class="arrow">&#9654;</div>
+</div>
+<div class="sensor-block">
+    <span>MQ-135<br><span id="airRaw">----</span></span>
+    <div class="arrow">&#9654;</div>
+</div>
+</aside>
+
+<main class="panel">
+
+<div id="connectBar">
+    <label>ESP32 IP: <input type="text" id="espip" placeholder="192.168.1.50"> </label>
+    <button id="connectBtn">Connect</button>
+    <span id="status" class="status-dot offline"></span>
+</div>
+
+<h1>Temperature: <span id="temperature">----</span>°C</h1>
+<h1>Humidity: <span id="humidity">----</span>%</h1>
+<h1>Pressure: <span id="pressure">----</span> hPa</h1>
+
+<div class="extra-row">
+    <p>Light: <span id="light">----</span> lux</p>
+    <p>Noise: <span id="noise">----</span> dB</p>
+</div>
+
+<canvas id="chart" width="700" height="350"></canvas>
+
+
+</main>
+</div>
+<script src="main.js"></script>
+</body>
+</html>
