@@ -21,7 +21,7 @@
 #define ADC_MIC         A1      // MAX4466 analog out (GPIO 18)
 #define BUZZER_PIN      11      // Active buzzer (free GPIO)
 
-#define MQ135_ALERT_THRESHOLD  800
+#define MQ135_ALERT_THRESHOLD  1000
 const unsigned long SENSOR_INTERVAL    = 2000;   // ms between sensor reads
 const unsigned long MQ135_WARMUP_MS    = 30000;  // 30-second MQ-135 warm-up
 const unsigned int  NOISE_SAMPLE_MS    = 50;     // peak-to-peak window for mic
@@ -330,11 +330,19 @@ void initSensors() {
   noTone(BUZZER_PIN);
 }
 
-  void buzzerReady() {
-    buzzerBeep(880, 80); delay (40);
-     buzzerBeep(1100, 80); delay(40);
-     buzzerBeep(1320, 120);
+ void buzzerReady() {
+  // Ascending power-up sweep, like a system spinning up
+  for (int freq = 300; freq <= 1800; freq += 50) {
+    tone(BUZZER_PIN, freq);
+    delay(4);
   }
+  noTone(BUZZER_PIN);
+  delay(70);
+
+  // Crisp two-tone "system online" confirmation
+  buzzerBeep(1400, 55);  delay(25);
+  buzzerBeep(1800, 140);
+}
 
 // Returns true if at least one source succeeded.
 bool readTempHumidityPressure() {
@@ -453,7 +461,7 @@ void printAllSensors() {
  
   // Noise
   Serial.printf("Noise    : %.1f dB (relative)\n", noiseDB);
-}
+} 
 
 void setup() {
 initSerial();
