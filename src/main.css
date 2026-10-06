@@ -3,120 +3,146 @@
 * {
     box-sizing: border-box;
 }
-
+/* Reset default margins and paddings for all elements */
 body {
     margin: 0;
     padding: 20px;
-    background: #e8813a;
+    background: #4E1F6E;
     font-family: 'Kdam Thmor Pro', sans-serif;
     display: flex;
     justify-content: center;
 }
-
+/*Container for the entire board and sidebar*/
 .board {
   display: flex;
-  background: #fff;
-  border: 6px solid #e2447a;
+  flex-wrap: wrap;
+  background: #F4D35E;
+  border: 6px solid #3e70b3;
   border-radius: 6px;
   max-width: 1000px;
   width: 100%;
   overflow: hidden;
 }
- 
+ /* Sidebar styling */
 
 .sidebar {
   display: flex;
   flex-direction: column;
-  border-right: 6px solid #e2447a;
+  border-right: 6px solid #1a5799;
+  flex: 1 1 140px;
   min-width: 140px;
 }
- 
+ /* Individual sensor block styling*/
 .sensor-block {
   flex: 1;
-  border-bottom: 4px solid #e2447a;
+  border-bottom: 4px solid #1a5799;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px;
-  color: #e2447a;
+  color: #457B9D;
   font-weight: bold;
   font-size: 1.1em;
   text-align: left;
 }
- 
+ /* Remove bottom border for the last sensor block to avoid double borders*/
 .sensor-block:last-child {
   border-bottom: none;
 }
- 
+ /* Arrow icon styling for indicating sensor status or direction */
 .arrow {
-  color: #e2447a;
+  color: #1a5799;
   font-size: 1.3em;
 }
- 
+ /* Styling for the sensor value display */
 /* Main panel */
 .panel {
-  flex: 1;
+  flex: 3 1 300px;
+  min-width: 0;
   padding: 20px 30px;
-  color: #e2447a;
+  color: #1a5799;
 }
- 
+ /* Heading styling within the panel */
 .panel h1 {
   font-size: 2em;
   margin: 10px 0;
   font-family: 'Kdam Thmor Pro', sans-serif;
 }
- 
+/* Paragraph styling within the panel */ 
 .extra-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 30px;
   font-size: 1.2em;
   margin: 10px 0 20px 0;
 }
- 
+ /* Styling for the canvas element used for charts or graphs */
 #connectBar {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 20px;
   font-size: 0.9em;
 }
- 
+ /* Styling for the input field within the connection bar */
 #connectBar input {
   padding: 4px 8px;
-  border: 2px solid #e2447a;
+  border: 2px solid #1a5799;
   border-radius: 4px;
 }
- 
+ /* Styling for the button within the connection bar */
 #connectBar button {
-  background: #e2447a;
+  background: #1a5799;
   color: #fff;
   border: none;
   padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
 }
- 
+ /* Change button background color on hover for better user interaction feedback */
 #connectBar button:hover {
-  background: #c73267;
+  background: #1a5799;
 }
- 
+ /* Styling for the status dot indicating online/offline status */
 .status-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
   display: inline-block;
 }
- 
+ /* Different background colors for online and offline status */
 .status-dot.offline {
-  background: #999;
+  background: #e70707;
 }
- 
+ /* Different background colors for online and offline status */
 .status-dot.online {
   background: #2ecc71;
 }
- 
+ /* Styling for the canvas element used for charts or graphs */
 canvas {
-  border: 2px solid #e2447a;
+  border: 5px solid #1a5799;
   border-radius: 4px;
   max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+@media (max-width: 560px) {
+  .board {
+    flex-direction: column;
+  }
+  .sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 6px solid #1a5799;
+  }
+  .sensor-block {
+    flex: 1 1 50%;
+    border-bottom: 4px solid #1a5799;
+  }
+  .panel h1 {
+    font-size: 1.5em;
+  }
 }
