@@ -117,10 +117,57 @@ body {
 }
  /* Different background colors for online and offline status */
 .status-dot.online {
-  background: #2ecc71;
+  background: #11c507;
 }
  /* Styling for the canvas element used for charts or graphs */
-canvas {
+/* Sidebar blocks are clickable: name on top, sensor chip and live value below */
+.sensor-block {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sensor-block small {
+  font-size: 0.7em;
+  font-weight: normal;
+}
+.sensor-block .reading {
+  font-size: 0.95em;
+  color: #1a5799;
+}
+
+/* Mouse over a block */
+.sensor-block:hover {
+  background: rgba(26, 87, 153, 0.12);
+}
+
+/* The block whose sensor is on the chart right now */
+.sensor-block.active {
+  background: #1a5799;
+  color: #fff;
+}
+.sensor-block.active .reading {
+  color: #fff;
+}
+
+/* Air quality above the alert level */
+.sensor-block.alert {
+  background: #e70707;
+  color: #fff;
+}
+.sensor-block.alert .reading {
+  color: #fff;
+}
+
+/* Visible outline when moving between blocks with the Tab key */
+.sensor-block:focus-visible {
+  outline: 3px solid #4E1F6E;
+  outline-offset: -3px;
+}
+
+ canvas {
   border: 5px solid #1a5799;
   border-radius: 4px;
   max-width: 100%;
@@ -145,4 +192,24 @@ canvas {
   .panel h1 {
     font-size: 1.5em;
   }
+}
+
+/* Chart title and subtitle */
+.chart-title {
+  font-family: 'Kdam Thmor Pro', sans-serif;
+  font-size: 1.4em;
+  margin: 20px 0 4px;
+}
+.chart-sub {
+  margin: 0 0 10px;
+  font-size: 0.9em;
+}
+
+/* Min / Avg / Max row under the chart */
+.chart-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 30px;
+  margin-top: 10px;
+  font-size: 1.1em;
 }

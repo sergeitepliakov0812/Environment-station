@@ -21,29 +21,33 @@
 #define ADC_MIC         A1      // MAX4466 analog out (GPIO 18)
 #define BUZZER_PIN      11      // Active buzzer (free GPIO)
 
-#define MQ135_ALERT_THRESHOLD  1000
+#define MQ135_ALERT_THRESHOLD  1500 // ADC value threshold for air quality alert
+#define MQ135_ALERT_COUNT 3 // Number of consecutive readings above threshold to trigger alert
+const unsigned long ALERT_COOLDOWN_MS = 30000; // 30 seconds cooldown between alerts
 const unsigned long SENSOR_INTERVAL    = 2000;   // ms between sensor reads
 const unsigned long MQ135_WARMUP_MS    = 30000;  // 30-second MQ-135 warm-up
 const unsigned int  NOISE_SAMPLE_MS    = 50;     // peak-to-peak window for mic
 
-Adafruit_AHTX0   aht;
-Adafruit_BMP280  bmp;
-BH1750           lightMeter;
+Adafruit_AHTX0   aht; // AHT20 temperature and humidity sensor
+Adafruit_BMP280  bmp; // BMP280 pressure and temperature sensor
+BH1750           lightMeter; // BH1750 light sensor
 
-
+unsigned long lastAlertTime = 0; // Timestamp of the last alert
+int alertStreak = 0; // Counter for consecutive readings above threshold
 float temperature    = 0.0f;   // °C  (averaged AHT + BMP)
 float humidity       = 0.0f;   // %RH (AHT)
 float pressure       = 0.0f;   // hPa (BMP)
 int   airQualityRaw  = 0;      // 0–4095 ADC
-bool  mq135Ready     = false;
+bool  mq135Ready     = false;  // MQ-135 warm-up complete
 float lux            = 0.0f;   // lux (BH1750)
 float noiseDB        = 0.0f;   // relative dB (MAX4466)
-
-unsigned long lastSensorRead = 0;
-unsigned long lastIpPrint = 0;
-bool ahtOK = false;
-bool bmpOK = false;
-bool lightOK = false;
+//------------- Sensor state variables --------------
+unsigned long lastSensorRead = 0; // Timestamp of the last sensor read
+unsigned long lastIpPrint = 0; // Timestamp of the last IP address print
+bool ahtOK = false; // AHT20 sensor initialized successfully
+bool bmpOK = false; // BMP280 sensor initialized successfully
+bool bh1750OK = false; // BH1750 sensor initialized successfully
+bool lightOK = false; // Light sensor initialized successfully
 //------------- Screen setup --------------
 Adafruit_ST7789 tftScreen = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
@@ -69,7 +73,7 @@ const char PASSWORD[] = SECRET_PASS;
 AsyncWebServer server(80);
 // Create a WebSocket object
 AsyncWebSocket ws("/ws");
-
+//------------- Function declarations --------------
 void initSerial();
 void initPins();
 void initLittleFS();
@@ -93,7 +97,7 @@ void handleWebSocketMessage(void* arg, uint8_t* data, size_t len);
 void onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len);
 String readFile(fs::FS& fs, const char* path);
 void writeFile(fs::FS& fs, const char* path, const char* message);
-
+//------------- Setup function --------------
 void onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len) {
   switch (type) {
     case WS_EVT_CONNECT:
@@ -117,7 +121,7 @@ void onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType 
       break;
   }
 }
-
+//------------- LittleFS setup --------------
 void initLittleFS() {
   if (!LittleFS.begin(true)) {
     Serial.println("LittleFS failed to setup");
@@ -162,7 +166,7 @@ void writeFile(fs::FS& fs, const char* path, const char* message) {
     Serial.println("- writeFile failed");
   }
 }
-
+//------------- Sensor reading and JSON output --------------
 String getOutputStates() {
 JSONVar myArray;
 
@@ -194,11 +198,11 @@ myArray["values"][5]["unit"] = "dB";
 String jsonString = JSON.stringify(myArray);
 return JSON.stringify(myArray);
 }
-
+//------------- WebSocket notification --------------
 void notifyClients(String state) {
   ws.textAll(state);
 }
-
+//------------- WiFi setup --------------
 void initWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, PASSWORD);
@@ -211,13 +215,13 @@ void initWiFi() {
   Serial.print("Connected, IP address: ");
   Serial.println(WiFi.localIP());
 }
-
+//------------- WebSocket setup --------------
 void initWebSocket() {
   ws.onEvent(onEvent);
   server.addHandler(&ws);
   Serial.println("WebSocket initialized");
 }
-
+//------------- WebServer setup --------------
 void initWebServer() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send(LittleFS, "/index.html", "text/html", false);
@@ -226,7 +230,7 @@ void initWebServer() {
   server.begin();
   Serial.println("Web server started");
 }
-
+//------------- WebSocket message handling --------------
 void handleWebSocketMessage(void* arg, uint8_t* data, size_t len) {
   AwsFrameInfo* info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
@@ -250,7 +254,7 @@ void handleWebSocketMessage(void* arg, uint8_t* data, size_t len) {
   }
 }
  
-
+//------------- Initialization functions --------------
 void initSerial() {
   Serial.begin(115200);
   while (!Serial) { delay(10); }
@@ -258,7 +262,7 @@ void initSerial() {
   Serial.println();
   Serial.println(F("=== School Environmental Monitor — Sensor Test ==="));
 }
- 
+//------------- Pin setup --------------
 void initPins() {
   pinMode(MQ135_DO_PIN, INPUT);
   pinMode(BUZZER_PIN, OUTPUT);
@@ -269,7 +273,7 @@ void initPins() {
  
   Serial.println(F("[pins] OK"));
 }
-
+//------------- Sensor setup --------------
 void initSensors() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Wire.setClock(400000);
@@ -329,7 +333,7 @@ void initSensors() {
   }
   noTone(BUZZER_PIN);
 }
-
+// Buzzer ready sound
  void buzzerReady() {
   // Ascending power-up sweep, like a system spinning up
   for (int freq = 300; freq <= 1800; freq += 50) {
@@ -356,7 +360,7 @@ bool readTempHumidityPressure() {
       ahtHum  = hEvent.relative_humidity;
     }
   }
- 
+
   if (bmpOK) {
     bmpTemp = bmp.readTemperature();
     bmpPres = bmp.readPressure() / 100.0f;   // Pa → hPa
@@ -411,7 +415,7 @@ float readNoise() {
     if (s > sampleMax) sampleMax = s;
     if (s < sampleMin) sampleMin = s;
   }
- 
+ // Calculate peak-to-peak value
   int peakToPeak = sampleMax - sampleMin;
   // Map peak-to-peak (noise floor ~30 to max 4095) onto a 0–100 dB relative scale
   if (peakToPeak < 1) peakToPeak = 1;
@@ -427,7 +431,7 @@ bool readAllSensors() {
   readNoise();
   return ok;
 }
- 
+// Prints all sensor readings to Serial in a human-readable format.
 void printAllSensors() {
   Serial.println(F("──────────────────────────────────"));
  
@@ -452,17 +456,21 @@ void printAllSensors() {
     unsigned long remaining = (MQ135_WARMUP_MS - millis()) / 1000;
     Serial.printf("MQ-135   : warming up (%lu s left)\n", remaining);
   } else {
-    bool alert = (digitalRead(MQ135_DO_PIN) == LOW) || (airQualityRaw > MQ135_ALERT_THRESHOLD);
-    Serial.printf("MQ-135   : raw %4d | DO: %s\n",
+   bool aboveThreshold = (airQualityRaw > MQ135_ALERT_THRESHOLD); // Check if the reading is above the threshold
+    if (aboveThreshold) alertStreak++; else alertStreak = 0; // Increment or reset the alert streak counter
+  bool alert = (alertStreak >= MQ135_ALERT_COUNT); // Determine if we should trigger an alert based on the streak
+    Serial.printf("MQ-135   : raw %4d | DO: %s\n", 
                   airQualityRaw,
                   alert ? "ALERT" : "clear");
-    if (alert) buzzerAlert();
+    if (alert && (millis() - lastAlertTime >= ALERT_COOLDOWN_MS)) { // Check cooldown
+  lastAlertTime = millis(); // Update last alert time
+  buzzerAlert();
   }
- 
+}
   // Noise
-  Serial.printf("Noise    : %.1f dB (relative)\n", noiseDB);
+  Serial.printf("Noise    : %.1f dB (relative)\n", noiseDB);  
 } 
-
+//------------- Setup and loop --------------
 void setup() {
 initSerial();
   initPins();
