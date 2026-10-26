@@ -91,6 +91,8 @@ float readLight();
 float readNoise();
 bool readAllSensors();
 void printAllSensors();
+void initScreen();
+void showIPOnScreen();
 String getOutputStates();
 void notifyClients(String state);
 void handleWebSocketMessage(void* arg, uint8_t* data, size_t len);
@@ -257,7 +259,8 @@ void handleWebSocketMessage(void* arg, uint8_t* data, size_t len) {
 //------------- Initialization functions --------------
 void initSerial() {
   Serial.begin(115200);
-  while (!Serial) { delay(10); }
+  unsigned long serialStart = millis();
+  while (!Serial && millis() - serialStart < 2000) { delay(10); }   // give up after 2 s
   delay(1000);
   Serial.println();
   Serial.println(F("=== School Environmental Monitor — Sensor Test ==="));
@@ -273,6 +276,54 @@ void initPins() {
  
   Serial.println(F("[pins] OK"));
 }
+//------------- TFT screen --------------
+// Turns on the built-in screen and shows "Connecting to WiFi..."
+void initScreen() {
+  pinMode(TFT_BACKLITE, OUTPUT);        // backlight pin
+  digitalWrite(TFT_BACKLITE, HIGH);     // backlight on
+  pinMode(TFT_I2C_POWER, OUTPUT);       // power pin for the screen (and the STEMMA QT port)
+  digitalWrite(TFT_I2C_POWER, HIGH);
+  delay(10);                            // give the screen time to power up
+
+  tftScreen.init(135, 240);             // screen size: 135 x 240 pixels
+  tftScreen.setRotation(3);             // landscape: 240 wide, 135 tall
+  tftScreen.fillScreen(ST77XX_BLACK);   // clear to black
+  tftScreen.setTextSize(2);             // each character is 12 x 16 pixels
+  tftScreen.setTextColor(ST77XX_WHITE);
+  tftScreen.setCursor(0, 10);           // x = 0, y = 10
+  tftScreen.println("Connecting to");
+  tftScreen.println("WiFi...");
+}
+
+// Shows the ESP IP and the website address once WiFi is connected
+void showIPOnScreen() {
+  tftScreen.fillScreen(ST77XX_BLACK);
+
+  // Heading
+  tftScreen.setTextSize(2);                 // 12 x 16 px characters
+  tftScreen.setTextColor(ST77XX_GREEN);
+  tftScreen.setCursor(0, 5);
+  tftScreen.println("WiFi connected");
+
+  // ESP IP address, large and easy to read
+  tftScreen.setTextColor(ST77XX_WHITE);
+  tftScreen.setCursor(0, 35);
+  tftScreen.println("ESP IP:");
+  tftScreen.setTextColor(ST77XX_YELLOW);
+  tftScreen.setCursor(0, 58);
+  tftScreen.println(WiFi.localIP());
+
+  // Full website address, smaller so even a long IP fits on one line
+  tftScreen.setTextSize(1);                 // 6 x 8 px characters
+  tftScreen.setTextColor(ST77XX_WHITE);
+  tftScreen.setCursor(0, 90);
+  tftScreen.println("Website (type in browser):");
+  tftScreen.setTextColor(ST77XX_CYAN);
+  tftScreen.setCursor(0, 105);
+  tftScreen.print("http://");
+  tftScreen.println(WiFi.localIP());
+}
+
 //------------- Sensor setup --------------
 void initSensors() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -475,7 +526,9 @@ void setup() {
 initSerial();
   initPins();
   initLittleFS();
+  initScreen();
   initWiFi();
+  showIPOnScreen();
   initSensors();
   initWebSocket();
   initWebServer();
