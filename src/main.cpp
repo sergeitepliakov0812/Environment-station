@@ -361,14 +361,14 @@ void initSensors() {
     delay(durationMs + 50);  // Wait for the tone to finish plus a small gap
     noTone(BUZZER_PIN);
   }
-
+// Buzzer initialization sound
   void initBuzzer() {
     buzzerBeep(1000, 80); 
     delay(60);
     buzzerBeep(1500, 80);
     Serial.println(F("[Buzzer] OK"));
   }
-
+// Buzzer alert sound
   void buzzerAlert() {
   for (uint8_t i = 0; i < 3; i++) {
     // Sweep up
@@ -522,6 +522,8 @@ void printAllSensors() {
   Serial.printf("Noise    : %.1f dB (relative)\n", noiseDB);  
 } 
 //------------- Setup and loop --------------
+// Setup function
+// Initializes serial, pins, LittleFS, screen, WiFi, sensors, WebSocket, and web server
 void setup() {
 initSerial();
   initPins();
@@ -537,7 +539,8 @@ initSerial();
   Serial.println();
   buzzerReady();
 }
- 
+ // Main loop function
+ // Periodically reads sensors, prints readings, and notifies WebSocket clients
 void loop() {
  unsigned long now = millis();
 

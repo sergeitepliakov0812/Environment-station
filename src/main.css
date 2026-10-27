@@ -129,10 +129,12 @@ body {
   cursor: pointer;
   transition: background 0.15s;
 }
+/* Smaller font size for the sensor name */
 .sensor-block small {
   font-size: 0.7em;
   font-weight: normal;
 }
+/* Styling for the sensor reading value */
 .sensor-block .reading {
   font-size: 0.95em;
   color: #1a5799;
@@ -148,6 +150,7 @@ body {
   background: #1a5799;
   color: #fff;
 }
+/* The reading value of the active sensor block */
 .sensor-block.active .reading {
   color: #fff;
 }
@@ -166,7 +169,7 @@ body {
   outline: 3px solid #4E1F6E;
   outline-offset: -3px;
 }
-
+/* Styling for the canvas element used for charts or graphs */
  canvas {
   border: 5px solid #1a5799;
   border-radius: 4px;
@@ -174,7 +177,7 @@ body {
   height: auto;
   display: block;
 }
-
+/* Responsive design for smaller screens */
 @media (max-width: 560px) {
   .board {
     flex-direction: column;
@@ -200,6 +203,7 @@ body {
   font-size: 1.4em;
   margin: 20px 0 4px;
 }
+/* Subtitle for the chart, providing additional context or information */
 .chart-sub {
   margin: 0 0 10px;
   font-size: 0.9em;
